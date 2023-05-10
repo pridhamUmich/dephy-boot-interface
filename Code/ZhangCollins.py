@@ -140,7 +140,8 @@ class ZhangCollins(Controller) :
             self.ts = parameters["onset_torque"]
         if ("normalized_peak_torque" in parameters and parameters["normalized_peak_torque"] != -1) :
             self.peak_torque_normalized = parameters["normalized_peak_torque"]
-          
+        
+        # if all the parameters are set calculate the spline parameters
         if (self.user_mass != -1 and self.t0  != -1, self.t1  != -1 and self.t2  != -1 and self.t3  != -1 and self.ts  != -1 and self.peak_torque_normalized  != -1) :
             
             self.tp = self.user_mass * self.peak_torque_normalized;
@@ -155,7 +156,7 @@ class ZhangCollins(Controller) :
             self.b2 = (3 *self.t3 *(self.tp - self.ts))/(2 * m.pow((self.t2 - self.t3),3));
             self.c2 = (3 *(m.pow(self.t2,2) - 2 *self.t2 *self.t3) * (self.tp - self.ts))/(2* m.pow((self.t2 - self.t3),3));
             self.d2 = -((3 * m.pow(self.t2,2) * self.t3 * self.tp - 6 * self.t2 * m.pow(self.t3, 2) * self.tp + 2 * m.pow(self.t3,3) * self.tp - 2 * m.pow(self.t2,3) * self.ts + 3 * m.pow(self.t2, 2) * self.t3 * self.ts)/(2 * m.pow((self.t2 - self.t3), 3)));
-            
+        # if not everything is set print the inputs so the user can see what is not set.    
         else :
             print('ZhangCollins :: set_parameters : one of the parameters is not set' + \
                 '\n user_mass : ' + str(self.user_mass) + \
@@ -165,7 +166,7 @@ class ZhangCollins(Controller) :
                 '\n stop_percent_gait : ' + str (self.t3) + \
                 '\n onset_torque : ' + str (self.ts) + \
                 '\n normalized_peak_torque : ' + str (self.peak_torque_normalized))
-    # @classmethod            
+               
     def calculate_torque_cmd(self, state_info) : 
         """
         Calculates the current torque command based on the supplied state info, the percent gait.  If the state info is not set correctly it will output 0.
@@ -182,16 +183,18 @@ class ZhangCollins(Controller) :
         torque_cmd : float  
             The calculated torque command in Nm.
         """
-        # update data
         
+        # Check that the state info that came in is correct.
         if ("percent_gait" in state_info and state_info["percent_gait"] != -1) :
             self.percent_gait = state_info["percent_gait"]
+        # If something is not set print the needed parameters so the user can see what is not set.
         else :
-            print('ZhangCollins :: calculate_torque_cmd : some of the data not set' + \
+            print('ZhangCollins :: calculate_torque_cmd : some of the data is not set' + \
                 '\n percent_gait : ' + str(self.percent_gait))
-        tau = 0
-                
-        if (self.percent_gait != -1) : 
+        tau = 0 # the torque command, set to zero so if we don't make a change it will output 0.
+        
+        
+        if (self.percent_gait != -1) : # check that the percent gait is set
             if ((self.percent_gait <= self.t1)  and  (self.t0 <= self.percent_gait)) : # torque ramp to ts at t1
                 tau = self.ts / (self.t1 - self.t0) * self.percent_gait - self.ts/(self.t1 - self.t0) * self.t0;
             
@@ -205,14 +208,16 @@ class ZhangCollins(Controller) :
                 tau = 0;
                 
         
-        self.torque_cmd = tau
-        return tau
+        self.torque_cmd = tau # store the torque command.
+        return tau # return the torque command.
 
 if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as plt
     
+    # create the ZhangCollins instance
     zhang_collins = ZhangCollins()
+    # create the parameter dictionary for input.
     parameters = {
         "user_mass" : 100,
         "ramp_start_percent_gait" : 0,
@@ -223,24 +228,28 @@ if __name__ == '__main__':
         "normalized_peak_torque" : .2,
     }
     
-    zhang_collins.set_parameters(parameters) #[100, 0, 27.1, 50.4, 62.7, 2, .2])
+    zhang_collins.set_parameters(parameters)
     
-    percent_gait = np.linspace(0,100,101)
-    torque_cmd = []
+    
+    percent_gait = np.linspace(0,100,101) # create a set of percent gaits to calculate torque for.
+    torque_cmd = [] # create a place to store the torque command output for printing.
+    # Initialize a state for the system 
     state_info = {
         "percent_gait" : -1
     }
     
-    for p in percent_gait :
-        state_info["percent_gait"] = p
-        torque_cmd.append(zhang_collins.calculate_torque_cmd(state_info))
-        # print(f'ZhangCollins :: __main__ : percent_gait {p} -> torque_cmd {zhang_collins.calculate_torque_cmd([p])}')
-    # print(torque_cmd)
-    fig, ax = plt.subplots()
-    ax.plot(percent_gait, torque_cmd)
+    for p in percent_gait : # iterate through the different values of percent_gait.
+        state_info["percent_gait"] = p # set the value in state info to be the current values we are using.
+        torque_cmd.append(zhang_collins.calculate_torque_cmd(state_info)) # append the newly calculated value to the end of the torque_cmd.
+        # print(f'ZhangCollins :: __main__ : percent_gait {p} -> torque_cmd {zhang_collins.calculate_torque_cmd([p])}')  # debug statement.
+    # print(torque_cmd) # debug statement.
+    
+    fig, ax = plt.subplots() # create a subplot
+    ax.plot(percent_gait, torque_cmd) # plot the torque command
 
+    # add labels to the plot
     ax.set(xlabel='Percent Gait', ylabel='Torque (Nm)',
            title='Zhang Collins Torque Profile')
     
-    fig.savefig("ZhangCollinsTest.png")
-    plt.show()
+    fig.savefig("ZhangCollinsTest.png") # save the plot
+    plt.show() # display the plot
