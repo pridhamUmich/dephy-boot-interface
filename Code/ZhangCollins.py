@@ -1,6 +1,8 @@
 from Controller import *
 import math as m
 
+# P. Pridham, May 2023 
+
 class ZhangCollins(Controller) : 
     """ 
     A class to represent a the Zhang/Collins profile from: Zhang, J., Fiers, P., Witte, K. A., Jackson, R. W., Poggensee, K. L., Atkeson, C. G., & Collins, S. H. (2017). Human-in-the-loop optimization of exoskeleton assistance during walking. Science, 356(6344), 1280-1284.
@@ -93,7 +95,7 @@ class ZhangCollins(Controller) :
         self.percent_gait = -1
     
     
-    def set_parameters(self, parameters) :
+    def set_parameters(self, **kwargs) :
         """
         Calculates the spline parameters a-d for the curve so we don't need to redo this every loop.  Should be called when the nature of the curve changes.  If all the curve parameters are not set (!=-1) it will not recalculate.
 
@@ -125,21 +127,21 @@ class ZhangCollins(Controller) :
         # peakTorqueNormalized = 0.20; # 0.76; # Using a smaller value due to Dephy Exo Limit.
         
         # Check that the correct parameters came in
-        if ("user_mass" in parameters and parameters["user_mass"] != -1) :
-            self.user_mass = parameters["user_mass"] # kg
+        if ("user_mass" in kwargs and kwargs["user_mass"] != -1) :
+            self.user_mass = kwargs["user_mass"] # kg
             # print(f'ZhangCollins::set_parameters : self.user_mass = {self.user_mass}')
-        if ("ramp_start_percent_gait" in parameters and parameters["ramp_start_percent_gait"] != -1) :
-            self.t0 = parameters["ramp_start_percent_gait"]
-        if ("onset_percent_gait" in parameters and parameters["onset_percent_gait"] != -1) :
-            self.t1 = parameters["onset_percent_gait"]
-        if ("peak_percent_gait" in parameters and parameters["peak_percent_gait"] != -1) :
-            self.t2 = parameters["peak_percent_gait"]
-        if ("stop_percent_gait" in parameters and parameters["stop_percent_gait"] != -1) :
-            self.t3 = parameters["stop_percent_gait"]
-        if ("onset_torque" in parameters and parameters["onset_torque"] != -1) :
-            self.ts = parameters["onset_torque"]
-        if ("normalized_peak_torque" in parameters and parameters["normalized_peak_torque"] != -1) :
-            self.peak_torque_normalized = parameters["normalized_peak_torque"]
+        if ("ramp_start_percent_gait" in kwargs and kwargs["ramp_start_percent_gait"] != -1) :
+            self.t0 = kwargs["ramp_start_percent_gait"]
+        if ("onset_percent_gait" in kwargs and kwargs["onset_percent_gait"] != -1) :
+            self.t1 = kwargs["onset_percent_gait"]
+        if ("peak_percent_gait" in kwargs and kwargs["peak_percent_gait"] != -1) :
+            self.t2 = kwargs["peak_percent_gait"]
+        if ("stop_percent_gait" in kwargs and kwargs["stop_percent_gait"] != -1) :
+            self.t3 = kwargs["stop_percent_gait"]
+        if ("onset_torque" in kwargs and kwargs["onset_torque"] != -1) :
+            self.ts = kwargs["onset_torque"]
+        if ("normalized_peak_torque" in kwargs and kwargs["normalized_peak_torque"] != -1) :
+            self.peak_torque_normalized = kwargs["normalized_peak_torque"]
         
         # if all the parameters are set calculate the spline parameters
         if (self.user_mass != -1 and self.t0  != -1, self.t1  != -1 and self.t2  != -1 and self.t3  != -1 and self.ts  != -1 and self.peak_torque_normalized  != -1) :
@@ -167,7 +169,7 @@ class ZhangCollins(Controller) :
                 '\n onset_torque : ' + str (self.ts) + \
                 '\n normalized_peak_torque : ' + str (self.peak_torque_normalized))
                
-    def calculate_torque_cmd(self, state_info) : 
+    def calculate_torque_cmd(self, **kwargs) : 
         """
         Calculates the current torque command based on the supplied state info, the percent gait.  If the state info is not set correctly it will output 0.
 
@@ -185,8 +187,8 @@ class ZhangCollins(Controller) :
         """
         
         # Check that the state info that came in is correct.
-        if ("percent_gait" in state_info and state_info["percent_gait"] != -1) :
-            self.percent_gait = state_info["percent_gait"]
+        if ("percent_gait" in kwargs and kwargs["percent_gait"] != -1) :
+            self.percent_gait = kwargs["percent_gait"]
         # If something is not set print the needed parameters so the user can see what is not set.
         else :
             print('ZhangCollins :: calculate_torque_cmd : some of the data is not set' + \
@@ -217,30 +219,15 @@ if __name__ == '__main__':
     
     # create the ZhangCollins instance
     zhang_collins = ZhangCollins()
-    # create the parameter dictionary for input.
-    parameters = {
-        "user_mass" : 100,
-        "ramp_start_percent_gait" : 0,
-        "onset_percent_gait" : 27.1,
-        "peak_percent_gait" : 50.4,
-        "stop_percent_gait" : 62.7,
-        "onset_torque" : 2,
-        "normalized_peak_torque" : .2,
-    }
     
-    zhang_collins.set_parameters(parameters)
+    zhang_collins.set_parameters(user_mass = 100, ramp_start_percent_gait = 0, onset_percent_gait = 27.1, peak_percent_gait = 50.4, stop_percent_gait = 62.7, onset_torque = 2, normalized_peak_torque = .2)
     
     
     percent_gait = np.linspace(0,100,101) # create a set of percent gaits to calculate torque for.
     torque_cmd = [] # create a place to store the torque command output for printing.
-    # Initialize a state for the system 
-    state_info = {
-        "percent_gait" : -1
-    }
-    
+        
     for p in percent_gait : # iterate through the different values of percent_gait.
-        state_info["percent_gait"] = p # set the value in state info to be the current values we are using.
-        torque_cmd.append(zhang_collins.calculate_torque_cmd(state_info)) # append the newly calculated value to the end of the torque_cmd.
+        torque_cmd.append(zhang_collins.calculate_torque_cmd(percent_gait = p)) # append the newly calculated value to the end of the torque_cmd.
         # print(f'ZhangCollins :: __main__ : percent_gait {p} -> torque_cmd {zhang_collins.calculate_torque_cmd([p])}')  # debug statement.
     # print(torque_cmd) # debug statement.
     

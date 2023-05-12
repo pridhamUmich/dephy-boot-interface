@@ -1,5 +1,7 @@
 import abc #abstract base class
 
+# P. Pridham, May 2023 
+
 class Controller(abc.ABC) :
     """ 
     An abstract class to define the calls to a Controller which outputs a torque command.
@@ -37,7 +39,7 @@ class Controller(abc.ABC) :
         self.torque_cmd = 0
     
     @abc.abstractmethod
-    def set_parameters(self, parameters) :
+    def set_parameters(self, **kwargs) :
         """
         Sets the parameters for the controller and calculates any new values that may be needed when parameters change.
 
@@ -53,7 +55,7 @@ class Controller(abc.ABC) :
         pass
     
     @abc.abstractmethod
-    def calculate_torque_cmd(self, state_data) :
+    def calculate_torque_cmd(self, **kwargs) :
         """
         Calculates the current torque command based on the supplied state info.  If the state info is not set correctly it will output 0.
 

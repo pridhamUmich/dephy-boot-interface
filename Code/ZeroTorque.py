@@ -37,8 +37,7 @@ class ZeroTorque(Controller) :
         
         
     
-    
-    def set_parameters(self, parameters) :
+    def set_parameters(self, **kwargs) :
         """
         Calculates the spline parameters a-d for the curve so we don't need to redo this every loop.  Should be called when the nature of the curve changes.  If all the curve parameters are not set (!=-1) it will not recalculate.
 
@@ -53,8 +52,8 @@ class ZeroTorque(Controller) :
         None   
         """
         pass
-               
-    def calculate_torque_cmd(self, state_info) : 
+    
+    def calculate_torque_cmd(self, **kwargs) : 
         """
         Calculates the current torque command based on the supplied state info, empty. 
 
@@ -80,22 +79,14 @@ if __name__ == '__main__':
     # create the ZhangCollins instance
     controller = ZeroTorque()
     # create the parameter dictionary for input.
-    parameters = {
-        
-    }
     
-    controller.set_parameters(parameters)
+    controller.set_parameters()
     
     percent_gait = np.linspace(0,100,101) # create a set of percent gaits to calculate torque for.
     torque_cmd = [] # create a place to store the torque command output for printing.
-    # Initialize a state for the system 
-    state_info = {
-        "percent_gait" : -1
-    }
     
     for p in percent_gait : # iterate through the different values of percent_gait.
-        state_info["percent_gait"] = p # set the value in state info to be the current values we are using.
-        torque_cmd.append(controller.calculate_torque_cmd(state_info)) # append the newly calculated value to the end of the torque_cmd.
+        torque_cmd.append(controller.calculate_torque_cmd()) # append the newly calculated value to the end of the torque_cmd.
         # print(f'ZhangCollins :: __main__ : percent_gait {p} -> torque_cmd {zhang_collins.calculate_torque_cmd([p])}')  # debug statement.
     # print(torque_cmd) # debug statement.
     
