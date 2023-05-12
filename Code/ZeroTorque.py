@@ -43,9 +43,7 @@ class ZeroTorque(Controller) :
 
         Parameters
         ----------
-        parameters : dict
-            Parameters for the Zero torque profile, keys :
-                None
+        None
              
         Returns
         -------
@@ -59,9 +57,7 @@ class ZeroTorque(Controller) :
 
         Parameters
         ----------
-        state_info : dict
-            State info from the exo and person used to calculate the Zhang/Collins torque profile, keys :
-                None
+        None
                 
             
         Returns

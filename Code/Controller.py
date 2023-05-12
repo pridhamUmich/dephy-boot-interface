@@ -45,8 +45,8 @@ class Controller(abc.ABC) :
 
         Parameters
         ----------
-        parameters : dict
-            Parameters for the torque calculation, keys should be defined in the inheriting class during override.
+        **kwargs
+            Parameters should be passed as keyword arguments specific to the controller.
             
         Returns
         -------
@@ -61,8 +61,8 @@ class Controller(abc.ABC) :
 
         Parameters
         ----------
-        state_info : dict
-            State info from the exo and person used to calculate the torque command, keys should be defined in the inheriting class during override.
+        **kwargs
+            State information should be passed as keyword arguments.
             
         Returns
         -------

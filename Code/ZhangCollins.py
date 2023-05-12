@@ -101,16 +101,21 @@ class ZhangCollins(Controller) :
 
         Parameters
         ----------
-        parameters : dict
-            Parameters for the Zhang/Collins torque profile, keys :
-                "user_mass"
-                "ramp_start_percent_gait"
-                "onset_percent_gait"
-                "peak_percent_gait"
-                "stop_percent_gait"
-                "onset_torque"
-                "normalized_peak_torque"
-            
+        Keyword Arguments:
+            user_mass : float
+                Mass in kg of the person wearing the system.
+            ramp_start_percent_gait : float
+                The percent gait to start tensioning the belt.
+            onset_percent_gait : float
+                The percent gait to start ramping up the torque.
+            peak_percent_gait : float
+                The percent gait the peak torque will occur.
+            stop_percent_gait : float
+                The percent gait torque will stop being applied.
+            onset_torque : float
+                Torque Nm the belt will tension to prior to the onset of the push off torque
+            normalized_peak_torque : float
+                Magnitude of the peak torque normalized to user mass (Nm/kg)
             
         Returns
         -------
@@ -175,10 +180,9 @@ class ZhangCollins(Controller) :
 
         Parameters
         ----------
-        state_info : dict
-            State info from the exo and person used to calculate the Zhang/Collins torque profile, keys :
-                "percent_gait"
-                
+        Keyword Arguments:
+            percent_gait : float
+                The percent of gait the torque should be calculated for.    
             
         Returns
         -------
