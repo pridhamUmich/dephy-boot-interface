@@ -7,3 +7,21 @@ This material is based upon work supported by the Under Secretary of Defense for
 The software/firmware is provided to you on an As-Is basis
 
 Delivered to the U.S. Government with Unlimited Rights, as defined in DFARS Part 252.227-7013 or 7014 (Feb 2014). Notwithstanding any copyright notice, U.S. Government rights in this work are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other than as specifically authorized by the U.S. Government may violate any copyrights that exist in this work.#
+
+
+## Notes on setup for Windows
+1. Install the latest [Python](https://www.python.org/downloads/) 3.11.3 at time of writing
+    - Make sure to add Python to the path at the first screen of setup
+2. Install [git bash](https://git-scm.com/download/win) 
+    - ***other ways of accessing the Python environment do not work with the boots on Windows***
+3. Open git bash
+4. Navigate where you would like the virtual environment setup 
+    - `cd /c/Users/<Username>/<The rest of the path>`
+5. Setup a virtual environment
+    - you will need to use python 3.11 or later as the python version you are running
+    - `<path to python 3.11>/python -m venv <name of environment>`
+5. Activate the virtual environment
+    - `source <name of environment>/Scripts/activate`
+6. Install flexsea
+    - `python -m pip install flexsea`
+7. On the first run of the code for each firmware version you are using you must have internet access.
