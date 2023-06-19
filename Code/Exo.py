@@ -67,6 +67,8 @@ class Exo :
         The most recent current value sent to the exo.
     is_left : bool
         Left side when true
+    id_hex : string
+        The exo id in hexadecimal
     _direction : int
         1 when torque and angle don't need directional modification, -1 when the direction needs inversion from the raw.
     _wm_wa_coeffs : dict 
@@ -115,9 +117,20 @@ class Exo :
         prints the data you give, should work for raw or processed data, or any dict really.
     
     _accl_bit_to_m_s2(raw_reading)
-        Converts raw accelerometer reading to m/s^2
+        Converts raw accelerometer reading to m/s^2 
+        ACCL LED up is +z reading; Shank up is -y reading; toe up left_boot +x reading, right_boot -x reading
+        Raw readings don't seem to conform to right hand rule
+        left raw looking at outside with shank up:
+                       y^                      -----
+                        |                   __|     |
+        towards medial zX--->x towards heel|________|
+        right raw looking at outside with shank up:
+                       y^                  -----
+                        |                 |     |__
+        towards medial zX--->x towards toe|________|
     _gyro_bit_to_rad_s(raw_reading)
         Converts raw gyro reading to rad/s
+        Same axes as accelerometer
     _ticks_to_rad(raw_reading)
         Converts the raw encoder reading to rad, this is for the motor it looks like the ankle just needs a deg->rad conversion
     """
@@ -144,24 +157,23 @@ class Exo :
         self.streaming_frequency = config.getint('Boot','Streaming Frequency')
         
         # parameters
-        self._device = Device(port=port, firmwareVersion=boot_firmware_version)
+        self._device = Device(port=port, firmwareVersion=self.boot_firmware_version)
         self._device.open()  
         self._device.start_streaming(self.streaming_frequency)
-        self._device.set_gains(pid_val_current_control)
+        self._device.set_gains(**pid_val_current_control)
+        self.id_hex = f"{self._device.id:X}"
         
-        self.raw_data = self._device.read()
-        self.data = self._process_data()
         self.torque_cmd_Nm = 0
         self.current_cmd_A = 0
         self.is_left = is_left
-        self._direction = 1 if is_left else -1
+        self._direction = 1 if is_left else 1
         # read in the values for the fit curve of the derivitave of the motor angle with respect to the ankle angle
         self._wm_wa_coeffs = {
-            'poly4' : config.getfloat(self._device.id,'poly4'), 
-            'poly3' : config.getfloat(self._device.id,'poly3'), 
-            'poly2' : config.getfloat(self._device.id,'poly2'), 
-            'poly1' : config.getfloat(self._device.id,'poly1'),  
-            'poly0' : config.getfloat(self._device.id,'poly0')
+            'poly4' : config.getfloat(self.id_hex,'poly4'), 
+            'poly3' : config.getfloat(self.id_hex,'poly3'), 
+            'poly2' : config.getfloat(self.id_hex,'poly2'), 
+            'poly1' : config.getfloat(self.id_hex,'poly1'),  
+            'poly0' : config.getfloat(self.id_hex,'poly0')
         }
         # variable to store the value of the current derivitave
         self._wm_wa = 0 
@@ -172,7 +184,8 @@ class Exo :
         self._expected_step_duration = -1
         self._expected_stance_duration = -1
         
-        
+        self.raw_data = self._device.read()
+        self.data = self._process_data()
         
     
     def __del__(self):
@@ -221,7 +234,7 @@ class Exo :
         """
         
         self._device.command_motor_current(self._direction * int(1000*self._Nm_to_A(torque_cmd_Nm)))
-        self.torque_cmd_Nm = torque_cmd
+        self.torque_cmd_Nm = torque_cmd_Nm
         
     def _Nm_to_A(self, torque_cmd_Nm):
         """
@@ -286,22 +299,22 @@ class Exo :
         # TODO : figure out units and make converters 
         self.data = {
             "state_time" : self.raw_data["state_time"],
-            "accl_x" : _accl_bit_to_m_s2(self.raw_data["accelx"]),
-            "accl_y" : _accl_bit_to_m_s2(self.raw_data["accely"]),
-            "accl_z" : _accl_bit_to_m_s2(self.raw_data["accelz"]),
-            "gyro_x" : _gyro_bit_to_rad_s(self.raw_data["gyrox"]),
-            "gyro_y" : _gyro_bit_to_rad_s(self.raw_data["gyroy"]),
-            "gyro_z" : _gyro_bit_to_rad_s(self.raw_data["gyroz"]),
-            "motor_angle_rad" : self._direction * _ticks_to_rad(self.raw_data["mot_ang"]),
+            "accl_x" : Exo._accl_bit_to_m_s2(self.raw_data["accelx"]),
+            "accl_y" : Exo._accl_bit_to_m_s2(self.raw_data["accely"]),
+            "accl_z" : Exo._accl_bit_to_m_s2(self.raw_data["accelz"]),
+            "gyro_x" : Exo._gyro_bit_to_rad_s(self.raw_data["gyrox"]),
+            "gyro_y" : Exo._gyro_bit_to_rad_s(self.raw_data["gyroy"]),
+            "gyro_z" : Exo._gyro_bit_to_rad_s(self.raw_data["gyroz"]),
+            "motor_angle_rad" : self._direction * Exo._ticks_to_rad(self.raw_data["mot_ang"]),
             "motor_velocity_rad_s" : self._direction * self.raw_data["mot_vel"]*m.pi/180,
             "motor_current_A" : self._direction * self.raw_data["mot_cur"]/1000,
             "ankle_angle_rad" : self._direction * self.raw_data["ank_ang"]/100*m.pi/180,
             "ankle_velocity_rad_s" : self._direction * self.raw_data["ank_vel"]/10*m.pi/180,
             "battery_voltage_V" : self.raw_data["batt_volt"]/1000,
-            "heelstrike_trigger" : _check_for_heelstrike(),
-            "toeoff_trigger" : _check_for_toeoff(),
-            "percent_gait" : _calc_percent_gait(),
-            "percent_stance" : _calc_percent_stance(),
+            "heelstrike_trigger" : self._check_for_heelstrike(),
+            "toeoff_trigger" : self._check_for_toeoff(),
+            "percent_gait" : self._calc_percent_gait(),
+            "percent_stance" : self._calc_percent_stance(),
         }
     
     def _check_for_heelstrike(self):
@@ -393,7 +406,7 @@ class Exo :
             # self.percent_gait = 100;
         return -1
     
-    def update_expected_duration(self): 
+    def _update_expected_duration(self): 
         """
         DESCRIPTION
         TODO : See if there are updates we want to make
@@ -425,7 +438,7 @@ class Exo :
 
         
     
-    def clear_gait_estimate(self):
+    def _clear_gait_estimate(self):
         """
         DESCRIPTION
         TODO : See if there are updates we want to make and add toe off.
@@ -618,6 +631,7 @@ class Exo :
 if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as plt
+    import os
     
     available_boots = Exo.scan_for_boots()
     for b in available_boots:
@@ -631,12 +645,20 @@ if __name__ == '__main__':
     try:
         while True :
             #this only works if there is a left and right boot. For it to work single sided you would need to check that each boot exists.
+            os.system('cls')
             if 'left_boot' in locals():
                 left_boot.read_data()
-                left_boot.send_torque(1)
+                print('\nLeft')
+                Exo.print_data(left_boot.raw_data)
+                # left_boot.send_torque(.5)
+                left_boot._device.command_motor_current(int(500))
             if 'right_boot' in locals():    
                 right_boot.read_data()
-                right_boot.send_torque(1)
+                print('\nRight')
+                Exo.print_data(right_boot.raw_data)
+                # right_boot.send_torque(.5)
+                right_boot._device.command_motor_current(int(500))
+                
         
     except KeyboardInterrupt:
         pass
@@ -645,3 +667,8 @@ if __name__ == '__main__':
         left_boot.__del__() 
     if 'right_boot' in locals():
         right_boot.__del__()
+        
+        ##ACCL LED up is +z reading, Shank up is -y reading, toe up left_boot +reading right_boot - reading
+        ## ankle ang, right decreases with plantarflexion, not zeroed left increases with plantar flexion
+        ## Motor command Left positive wraps underhand  right positive wraps overhand
+       ## motor angle led up counter clockwise is positive.
