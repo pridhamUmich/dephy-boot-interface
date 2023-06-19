@@ -86,31 +86,42 @@ class Exo :
         Sets the parameters for the exo.  Currently just a place holder.
     send_torque(torque_cmd_Nm):
         Sends a current command to the motor based on the provided ankle torque command in Nm, and sets the current_torque_cmd_Nm to the value sent.
+    read_data():
+        Reads and returns the data from the exo.
+    
     _Nm_to_A(torque_cmd_Nm):
         Calculates the motor current needed to provide the requested ankle torque. This is based on the ankle angle and the assumption that the belt is tensioned.
     _calc_wm_wa():
         Calculates the current derivative of the motor angle with respect to the ankle angle.  
-    read_data():
-        Reads and returns the data from the exo.
     _process_data():
         converts the raw data to 'regular' units
-        
+    _check_for_heelstrike()
+        Checks for a heelstrike and return true if one is detected, and false otherwise
+    _check_for_toeoff()
+        Checks for a toeoff and return true if one is detected, and false otherwise
+    _calc_percent_gait()
+        Calculates an estimate of the percent gait and returns that estimate.
+    _calc_percent_stance()
+        Calculates an estimate of the percent stance and returns that estimate.
+
+            
     Static Methods
     -------
     scan_for_boots(ports)
         Scans the ports to see if any boots are attached, takes in an array of port strings, returns a dict with the port and hex boot id if they are found.
     get_is_left(id)
         Checks the config file for the id and returns true if the boot is left, false if it is not left, and None if the id is not found.
+    print_data(data_dict)
+        prints the data you give, should work for raw or processed data, or any dict really.
+    
     _accl_bit_to_m_s2(raw_reading)
         Converts raw accelerometer reading to m/s^2
     _gyro_bit_to_rad_s(raw_reading)
         Converts raw gyro reading to rad/s
     _ticks_to_rad(raw_reading)
         Converts the raw encoder reading to rad, this is for the motor it looks like the ankle just needs a deg->rad conversion
-    print_data(data_dict)
-        prints the data you give, should work for raw or processed data, or any dict really.
     """
-    def __init__(self, port, is_left) : 
+    def __init__(self, port, is_left): 
         """
         Constructs all the necessary attributes for the Exo.  Unset parameters are None.
 
@@ -153,10 +164,18 @@ class Exo :
             'poly0' : config.getfloat(self._device.id,'poly0')
         }
         # variable to store the value of the current derivitave
-		self._wm_wa = 0 
+        self._wm_wa = 0 
         self._kt = .048 #Nm/A
+        
+        self._motor_slack_position = -1
+        
+        self._expected_step_duration = -1
+        self._expected_stance_duration = -1
+        
+        
+        
     
-    def __del__(self)
+    def __del__(self):
         """
         Stops the motors and streaming and closes the Dephy device.
 
@@ -172,7 +191,7 @@ class Exo :
         self._device.stop_streaming()
         self._device.close()
         
-    def set_parameters(self, **kwargs) :
+    def set_parameters(self, **kwargs):
         """
         Sets the parameters for the exo.  Currently just a place holder.
 
@@ -187,8 +206,8 @@ class Exo :
         """
         pass
         
-    def send_torque(self,torque_cmd_Nm)
-        '''
+    def send_torque(self,torque_cmd_Nm):
+        """
         Sends a current command to the motor based on the provided ankle torque command in Nm, and sets the current_torque_cmd_Nm to the value sent.
 
         Parameters
@@ -199,13 +218,13 @@ class Exo :
         Returns
         -------
         None   
-        '''
+        """
         
         self._device.command_motor_current(self._direction * int(1000*self._Nm_to_A(torque_cmd_Nm)))
         self.torque_cmd_Nm = torque_cmd
         
-    def _Nm_to_A(self, torque_cmd_Nm)
-        '''
+    def _Nm_to_A(self, torque_cmd_Nm):
+        """
         Calculates the motor current needed to provide the requested ankle torque. This is based on the ankle angle and the assumption that the belt is tensioned.
 
         Parameters
@@ -217,13 +236,13 @@ class Exo :
         -------
         current_cmd_A : float
             The required motor current needed to provide the ankle torque based on the ankle position.
-        '''
+        """
         self._calc_wm_wa()
         self.current_cmd_A = (torque_cmd_Nm / self._wm_wa) / self._kt # get the current based on the torque cmd and the system state
         return self.current_cmd_A
-			
-    def _calc_wm_wa (self) :
-		'''
+            
+    def _calc_wm_wa (self):
+        """
         Calculates the current derivative of the motor angle with respect to the ankle angle.  
 
         Parameters
@@ -233,11 +252,11 @@ class Exo :
         Returns
         -------
         None   
-        '''
+        """
         self._wm_wa = 5 * self.data['ankle_angle_rad'] ** 4 * self._wm_wa_coeffs["poly4"] + 4 * self.data['ankle_angle_rad'] ** 3 * self._wm_wa_coeffs["poly3"] + 3 * self.data['ankle_angle_rad'] ** 2 * self._wm_wa_coeffs["poly2"] + 2 * self.data['ankle_angle_rad'] * self._wm_wa_coeffs["poly1"] + self._wm_wa_coeffs["poly0"]
-		self._wm_wa = 1 if self._wm_wa <= .5 else self._wm_wa  # safety check to keep it from getting too large.
+        self._wm_wa = 1 if self._wm_wa <= .5 else self._wm_wa  # safety check to keep it from getting too large.
     
-    def read_data(self) : 
+    def read_data(self): 
         """
         Reads the data from the device and performs calculations to transfer the raw data to the regular data.
 
@@ -252,7 +271,7 @@ class Exo :
         self.raw_data = self._device.read()
         self._process_data()
         
-    def _process_data(self) : 
+    def _process_data(self): 
         """
         Populates the data dict from the processed raw data only pulling the relevant fields.  This should only be called internally when initializing or in self.read_data()
 
@@ -279,10 +298,181 @@ class Exo :
             "ankle_angle_rad" : self._direction * self.raw_data["ank_ang"]/100*m.pi/180,
             "ankle_velocity_rad_s" : self._direction * self.raw_data["ank_vel"]/10*m.pi/180,
             "battery_voltage_V" : self.raw_data["batt_volt"]/1000,
+            "heelstrike_trigger" : _check_for_heelstrike(),
+            "toeoff_trigger" : _check_for_toeoff(),
+            "percent_gait" : _calc_percent_gait(),
+            "percent_stance" : _calc_percent_stance(),
         }
+    
+    def _check_for_heelstrike(self):
+        """
+        DESCRIPTION
+        TODO : see if there are any updates we want to make to be compatible with toeoff check.
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # the trigger on the inversion of the leg is one method.
+        # can also use spikes in acceleration (X seems to be best candidate but may not work well for slower gaits with smaller impacts)
+        # Other candidates also possible.
+        # triggered = False
+        # armed_time = 0
+        # if self.armed_timestamp != -1 :
+            # armed_time = self.data_current[self.idx_time] - self.armed_timestamp
+        # if ((not self.heelstrike_armed) and self.data_current[self.idx_gyro_z] >= self.segmentation_arm_threashold) :
+            # self.heelstrike_armed = True
+            # self.armed_timestamp = self.data_current[self.idx_time]
+        # if (self.heelstrike_armed and (self.data_current[self.idx_gyro_z] <= self.segmentation_trigger_threashold) ) :
+            # self.heelstrike_armed = False
+            # self.armed_timestamp = -1
+            # if  (armed_time > ARMED_DURATION_PERCENT/100 * self.expected_duration) :
+                # triggered = True
+            
+            
+        # self.segmentation_trigger = triggered
+        return -1
         
-    def print_data(data)
-        '''
+        
+    
+    def _check_for_toeoff(self):
+        """
+        DESCRIPTION
+        TODO : Need to figure out algorithm to use.
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # the trigger on the inversion of the leg is one method.
+        # can also use spikes in acceleration (X seems to be best candidate but may not work well for slower gaits with smaller impacts)
+        # Other candidates also possible.
+        # triggered = False
+        # armed_time = 0
+        # if self.armed_timestamp != -1 :
+            # armed_time = self.data_current[self.idx_time] - self.armed_timestamp
+        # if ((not self.heelstrike_armed) and self.data_current[self.idx_gyro_z] >= self.segmentation_arm_threashold) :
+            # self.heelstrike_armed = True
+            # self.armed_timestamp = self.data_current[self.idx_time]
+        # if (self.heelstrike_armed and (self.data_current[self.idx_gyro_z] <= self.segmentation_trigger_threashold) ) :
+            # self.heelstrike_armed = False
+            # self.armed_timestamp = -1
+            # if  (armed_time > ARMED_DURATION_PERCENT/100 * self.expected_duration) :
+                # triggered = True
+            
+            
+        # self.segmentation_trigger = triggered
+        return -1
+    
+    
+    def _calc_percent_gait(self):
+        """
+        DESCRIPTION
+        TODO : See if there are updates we want to make
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # if (-1 != self.expected_duration)  : # if the expected duration is set calculate the percent gait
+            # self.percent_gait = 100 * (self.data_current[self.idx_time] - self.heelstrike_timestamp_current) / self.expected_duration;
+                
+        # if (100 < self.percent_gait) : # if it has gone past 100 just hold 100
+            # self.percent_gait = 100;
+        return -1
+    
+    def update_expected_duration(self): 
+        """
+        DESCRIPTION
+        TODO : See if there are updates we want to make
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # TODO : In addition to checking that the step time is within a range, also check the the time it is armed is within the typical time.  Common errors occur from short spikes in acceleration that can have a close frequency.
+        
+        # step_time = self.heelstrike_timestamp_current - self.heelstrike_timestamp_previous
+        # if (-1 == self.heelstrike_timestamp_previous) : # if it is the first time running just record the timestamp
+            # self.heelstrike_timestamp_previous = self.heelstrike_timestamp_current;
+            # return;
+        # if  (-1 in self.past_gait_times) : # if all the values haven't been replaced
+            # self.past_gait_times.insert(0, step_time);  # insert the new value at the beginning
+            # self.past_gait_times.pop(); # remove the last value
+        # elif ((step_time <= 1.75 * max(self.past_gait_times)) and (step_time >= 0.25 * min(self.past_gait_times))) : # and (armed_time > ARMED_DURATION_PERCENT * self.expected_duration)): # a better check can be used.  If the person hasn't stopped or the step is good update the vector.  
+        # # !!!THE ARMED TIME CHECK STILL NEEDS TO BE TESTED!!!
+            # self.past_gait_times.insert(0, step_time);  # insert the new value at the beginning
+            # self.past_gait_times.pop(); # remove the last value
+            # # TODO: Add rate limiter for change in expected duration so it can't make big jumps
+            # self.expected_duration = sum(self.past_gait_times)/len(self.past_gait_times);  # Average to the nearest ms
+        return -1
+
+        
+    
+    def clear_gait_estimate(self):
+        """
+        DESCRIPTION
+        TODO : See if there are updates we want to make and add toe off.
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # self.past_gait_times = [-1] * NUM_GAIT_TIMES_TO_AVERAGE   # store the most recent gait times
+        # self.expected_duration = -1   # current estimated gait duration
+        
+    def _calc_percent_stance(self):
+        """
+        DESCRIPTION
+        TODO : need to incorporate heelstrike and toeoff.
+
+        Parameters
+        ----------
+        None   
+            
+        Returns
+        -------
+        None
+        """
+        # TODO : In addition to checking that the step time is within a range, also check the the time it is armed is within the typical time.  Common errors occur from short spikes in acceleration that can have a close frequency.
+        
+        # step_time = self.heelstrike_timestamp_current - self.heelstrike_timestamp_previous
+        # if (-1 == self.heelstrike_timestamp_previous) : # if it is the first time running just record the timestamp
+            # self.heelstrike_timestamp_previous = self.heelstrike_timestamp_current;
+            # return;
+        # if  (-1 in self.past_gait_times) : # if all the values haven't been replaced
+            # self.past_gait_times.insert(0, step_time);  # insert the new value at the beginning
+            # self.past_gait_times.pop(); # remove the last value
+        # elif ((step_time <= 1.75 * max(self.past_gait_times)) and (step_time >= 0.25 * min(self.past_gait_times))) : # and (armed_time > ARMED_DURATION_PERCENT * self.expected_duration)): # a better check can be used.  If the person hasn't stopped or the step is good update the vector.  
+        # # !!!THE ARMED TIME CHECK STILL NEEDS TO BE TESTED!!!
+            # self.past_gait_times.insert(0, step_time);  # insert the new value at the beginning
+            # self.past_gait_times.pop(); # remove the last value
+            # # TODO: Add rate limiter for change in expected duration so it can't make big jumps
+            # self.expected_duration = sum(self.past_gait_times)/len(self.past_gait_times);  # Average to the nearest ms
+        return -1
+
+    def print_data(data):
+        """
         prints the data you give, should work for raw or processed data, or any dict really.
 
         Parameters
@@ -293,11 +483,11 @@ class Exo :
         Returns
         -------
         None   
-        '''
+        """
         pretty_dict = json.dumps(data, indent=4)
         print(pretty_dict)
         
-    def _accl_bit_to_m_s2(raw_reading)
+    def _accl_bit_to_m_s2(raw_reading):
         """
         Converts raw accelerometer reading to m/s^2
         Values from https://dephy.com/start/#units
@@ -314,7 +504,7 @@ class Exo :
         """
         return raw_reading/8192*9.81 # raw/(LSB/g)*((m/s^2)/g)
         
-    def _gyro_bit_to_rad_s(raw_reading)
+    def _gyro_bit_to_rad_s(raw_reading):
         """
         Converts raw gyro reading to rad/s
         Values from https://dephy.com/start/#units
@@ -331,7 +521,7 @@ class Exo :
         """
         return raw_reading/32.8*m.pi/180 # raw/(LSB/(deg/s))*(rad/deg)
         
-    def _ticks_to_rad(raw_reading)
+    def _ticks_to_rad(raw_reading):
         """
         Converts the raw encoder reading to rad, this is for the motor it looks like the ankle just needs a deg->rad conversion
         Values from https://dephy.com/start/#units
@@ -418,7 +608,7 @@ class Exo :
         try :
             is_left = True if ('left' == config[dev_id]['Side']) else False if ('right' == config[dev_id]['Side']) else None
         # I think this might error out if the id does not exist so catch it and return None. 
-        else :
+        except :
             is_left = None
             
         return is_left
@@ -429,26 +619,29 @@ if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as plt
     
-    available_boots = scan_for_boots()
-    for b in available_boots
-        is_left = get_is_left(available_boots[b])
+    available_boots = Exo.scan_for_boots()
+    for b in available_boots:
+        is_left = Exo.get_is_left(available_boots[b])
         if is_left :
             left_boot = Exo(b, is_left)
-        else None != is_left :
+        elif None != is_left :
             right_boot = Exo(b, is_left)
     
     
     try:
         while True :
             #this only works if there is a left and right boot. For it to work single sided you would need to check that each boot exists.
-            left_boot.read_data()
-            right_boot.read_data()
-            
-            left_boot.send_torque(1)
-            right_boot.send_torque(1)
+            if 'left_boot' in locals():
+                left_boot.read_data()
+                left_boot.send_torque(1)
+            if 'right_boot' in locals():    
+                right_boot.read_data()
+                right_boot.send_torque(1)
         
     except KeyboardInterrupt:
         pass
     
-    left_boot.__del__() 
-    right_boot.__del__()
+    if 'left_boot' in locals():
+        left_boot.__del__() 
+    if 'right_boot' in locals():
+        right_boot.__del__()
