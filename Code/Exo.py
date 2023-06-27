@@ -9,33 +9,6 @@ import matplotlib.pyplot as plt
 
 # P. Pridham, May 2023 
 
-# boot_firmware_version = "7.2.0"
-
-# left_port = "COM1"
-# right_port = "COM4"
-
-# streaming_frequency = 500
-
-# set data values to pull
-# data_of_interest = [
-# "statetime",
-# "gyro_x",
-# "gyro_y",
-# "gyro_z",
-# "accl_x",
-# "accl_y",
-# "accl_z",
-# "motor_voltage",
-# "motor_current",
-# "motor_ang",
-# "motor_vel",
-# "ank_ang",
-# "ank_vel",
-# ]
-
-
- 
-
 class Exo : 
     """ 
     A class used to interface with the dephy exo.  Sends torque commands to the exo, and reads and stores data from the exo.
@@ -136,7 +109,7 @@ class Exo :
         "kd": 0,
         "k": 0,
         "b": 0,
-        "ff": 0,
+        "ff": 128,
     }
 
     def __init__(self, port, is_left): 
@@ -171,7 +144,7 @@ class Exo :
         self.torque_cmd_Nm = 0
         self.current_cmd_A = 0
         self.is_left = is_left # None for unknown
-        self._direction = _get_direction_from_is_left(is_left)
+        self._direction = Exo._get_direction_from_is_left(is_left)
         # read in the values for the fit curve of the derivitave of the motor angle with respect to the ankle angle
         self._wm_wa_coeffs = {
             'poly4' : config.getfloat(self.id_hex,'poly4'), 
@@ -202,9 +175,9 @@ class Exo :
         -------
         None   
         """
-        self._device.stop_motor()
-        self._device.stop_streaming()
-        self._device.close()
+        # self._device.stop_motor()
+        # self._device.stop_streaming()
+        # self._device.close()
         
     def set_parameters(self, **kwargs):
         """
@@ -236,7 +209,7 @@ class Exo :
         """
         requested_current_A = self._Nm_to_A(torque_cmd_Nm)
         current_with_saturation_A = requested_current_A if np.abs(requested_current_A) < self._current_limit_A else (np.sign(requested_current_A) * self._current_limit_A)
-        self._device.command_motor_current(self._direction * int(1000*current_with_saturation_A)
+        self._device.command_motor_current(self._direction * int(1000*current_with_saturation_A))
         self.torque_cmd_Nm = torque_cmd_Nm
     
     def read_data(self): 
@@ -336,11 +309,12 @@ class Exo :
             test_boot = Device(port=port_name, firmwareVersion=boot_firmware_version) # create a boot to get information for.
             
             try:
-                test_boot.open()    
+                test_boot.open()   
+                test_boot.start_streaming(10) # use a low streaming frequency for calibration
                 # if a calibration check is desired, do it
                 if do_calibration_check:
                     #check and run calibration
-                    _check_and_run_calibration(test_boot)
+                    Exo._check_and_run_calibration(test_boot)
                 boot_info.update({port_name : f"{test_boot.id:X}"}) # package the port and id pairs to return
             except RuntimeError :
                 print('Exo :: scan_for_boots : RuntimeError - likely there is a port that is not a boot')
@@ -433,14 +407,14 @@ class Exo :
             "accl_y_m_s2" : Exo._accl_bit_to_m_s2(raw_data["accely"]),
             "accl_z_m_s2" : Exo._accl_bit_to_m_s2(raw_data["accelz"]),
             "gyro_x_rad_s" : Exo._gyro_bit_to_rad_s(raw_data["gyrox"]),
-            "gyro_y_rad_s" : Exo._gyro_bit_to_rad_s(self.raw_data["gyroy"]),
-            "gyro_z_rad_s" : Exo._gyro_bit_to_rad_s(self.raw_data["gyroz"]),
-            "motor_angle_rad" : direction * Exo._ticks_to_rad(self.raw_data["mot_ang"]),
-            "motor_velocity_rad_s" : direction * self.raw_data["mot_vel"]*m.pi/180,
-            "motor_current_A" : direction * self.raw_data["mot_cur"]/1000,
-            "ankle_angle_rad" : direction * self.raw_data["ank_ang"]/100*m.pi/180,
-            "ankle_velocity_rad_s" : direction * self.raw_data["ank_vel"]/10*m.pi/180,
-            "battery_voltage_V" : self.raw_data["batt_volt"]/1000,
+            "gyro_y_rad_s" : Exo._gyro_bit_to_rad_s(raw_data["gyroy"]),
+            "gyro_z_rad_s" : Exo._gyro_bit_to_rad_s(raw_data["gyroz"]),
+            "motor_angle_rad" : direction * Exo._ticks_to_rad(raw_data["mot_ang"]),
+            "motor_velocity_rad_s" : direction * raw_data["mot_vel"]*m.pi/180,
+            "motor_current_A" : direction * raw_data["mot_cur"]/1000,
+            "ankle_angle_rad" : direction * raw_data["ank_ang"]/100*m.pi/180,
+            "ankle_velocity_rad_s" : direction * raw_data["ank_vel"]/10*m.pi/180,
+            "battery_voltage_V" : raw_data["batt_volt"]/1000,
         }
         return data
     
@@ -541,25 +515,47 @@ class Exo :
         # find the index count corresponding to 1 second
         timestep_s = np.mean(np.diff(time_s)) 
         num_idx_one_second = m.ceil(1/timestep_s)
+        print(f'Exo :: _find_parameters_wm_wa : num_idx_one_second = {num_idx_one_second}')
         
-        # look at sections in the code till you find a point where the motor acceleration is continually below the threshold, this should indicate the slack is pulled up. This will be the start of the data to use.
-        for i in range(start_idx,length(time_s) - num_idx_one_second):
-            if (num_idx_one_second == sum(motor_acceleration_rad_s2[i:(i+num_idx_one_second+1)] < acceleration_threshold_rad_s2)): # plus one due to how python slicing works in python
+        if make_plot:
+            fig, ax = plt.subplots()
+            ax.scatter(joint_angle_rad, motor_angle_rad) # show the data used to fit
+            ax.set(xlabel='Ankle Angle (rad)', ylabel='Motor Angle (rad)',
+            title='Full\nAnkle vs Motor Angle')
+            plt.show()
+            
+        # look at sections in the code till you find a point where the motor acceleration is continually below the threshold, this should indicate the slack is pulled up. This will be the start of the data to use.  This was needed for older boots that had hard stops.  Newer boots the strap is taught at full extension.
+        for i in range(start_idx,time_s.size - 1 - num_idx_one_second): # -1 needed due to zero indexing
+            if (num_idx_one_second == sum(np.array(motor_acceleration_rad_s2)[i:(i+num_idx_one_second+1)] < acceleration_threshold_rad_s2)): # plus one due to how python slicing works in python
                 start_idx = i
                 break
         # find where the joint angle reaches its max value, this is the end of the data to use to find the parameters.
-        stop_idx = 1+joint_angle_rad.index(np.maximum(joint_angle_rad))
-        
+        print(f'Exo :: _find_parameters_wm_wa : start_idx = {start_idx}')
+        stop_idx = 1+motor_angle_rad.index(np.amax(motor_angle_rad))
+        print(f'Exo :: _find_parameters_wm_wa : stop_idx = {stop_idx}')
         # pull out the data in the range we care about
         ankle_of_interest = joint_angle_rad[start_idx:stop_idx]
         motor_of_interest = motor_angle_rad[start_idx:stop_idx]
+        if make_plot:
+            fig, ax = plt.subplots()
+            ax.scatter(ankle_of_interest, motor_of_interest) # show the data used to fit
+            ax.set(xlabel='Ankle Angle (rad)', ylabel='Motor Angle (rad)',
+            title='Ankle vs Motor Angle\nIn range of interest')
+            plt.show()
         
         # find the unique ankle angle values, and corresponding motor values.  I think one of the ways we did this originally needed this to be monotonic, it may not be needed now.
         ankle_values, ankle_idx = np.unique(ankle_of_interest, return_index = True)
-        motor_values = motor_of_interest[ankle_idx]
         
+        motor_values = np.array(motor_of_interest)[ankle_idx]
+        # make the plots if desired
+        if make_plot:
+            fig, ax = plt.subplots()
+            ax.scatter(ankle_values, motor_values) # show the data used to fit
+            ax.set(xlabel='Ankle Angle (rad)', ylabel='Motor Angle (rad)',
+            title='Ankle vs Motor Angle\nUnique Ankle Values')
+            plt.show()
+        # need to use the new_series as an intermediate to pull out the coefficients from the fit.    
         new_series = np.polynomial.Polynomial.fit(ankle_values, motor_values, 5)
-        
         polynomial_coeff = new_series.convert().coef  # get the coefficients of the polynomial.
         
         # make the plots if desired
@@ -567,19 +563,19 @@ class Exo :
             fig, ax = plt.subplots()
             ax.scatter(ankle_values, motor_values) # show the data used to fit
             # plot the fit curve
-            ax.plot(ankle_values, ankle_values ** 5 * polynomial_coeff[4] + ankle_values ** 4 * polynomial_coeff[3] + ankle_values ** 3 * polynomial_coeff[2] + ankle_values ** 2 * polynomial_coeff[1]+ ankle_values * polynomial_coeff[0])
+            ax.plot(ankle_values, ankle_values ** 5 * polynomial_coeff[5] + ankle_values ** 4 * polynomial_coeff[4] + ankle_values ** 3 * polynomial_coeff[3] + ankle_values ** 2 * polynomial_coeff[2]+ ankle_values * polynomial_coeff[1] + polynomial_coeff[0], 'r')
             ax.set(xlabel='Ankle Angle (rad)', ylabel='Motor Angle (rad)',
-            title='Ankle vs Motor Angle')
+            title='Ankle vs Motor Angle\nWith Fit')
             plt.show()
             
             # check the derivative of the fit
             fig, ax = plt.subplots()
-            ax.plot(ankle_values, 5 * ankle_values ** 4 * polynomial_coeff[4] + 4 * ankle_values ** 3 * polynomial_coeff[3] + 3 * ankle_values ** 2 * polynomial_coeff[2] + 2 * ankle_values * polynomial_coeff[1]+ polynomial_coeff[0])
+            ax.plot(ankle_values, 5 * ankle_values ** 4 * polynomial_coeff[5] + 4 * ankle_values ** 3 * polynomial_coeff[4] + 3 * ankle_values ** 2 * polynomial_coeff[3] + 2 * ankle_values * polynomial_coeff[2]+ polynomial_coeff[1])
             ax.set(xlabel='Ankle Angle (rad)', ylabel='dMotor/dAnkle',
             title='Ankle vs dMotor/dAnkle')
             plt.show()
             
-        return polynomial_coeff
+        return polynomial_coeff[1:] # only return the ones used for the derivative
     
     def _check_and_run_calibration(device, config_filename = 'bootConfig.ini', current_cmd_A = .5):
         """
@@ -610,12 +606,12 @@ class Exo :
         # check if boot has a section in config
         if config.has_section(id_hex):
             # if a parameter is unset then require a calibration
-            if ((config[id_hex]['poly4'] == -1) 
-                and (config[id_hex]['poly3'] == -1) 
-                and (config[id_hex]['poly2'] == -1)
-                and (config[id_hex]['poly1'] == -1)
-                and (config[id_hex]['poly0'] == -1)
-                and ((config[id_hex]['Side'] != 'left') or (config[id_hex]['Side'] != 'right'))):
+            if ((config.getfloat(id_hex,'poly4') == -1) 
+                or (config.getfloat(id_hex, 'poly3') == -1) 
+                or (config.getfloat(id_hex, 'poly2') == -1)
+                or (config.getfloat(id_hex, 'poly1') == -1)
+                or (config.getfloat(id_hex, 'poly0') == -1)
+                or not((config[id_hex]['Side'] == 'left') or (config[id_hex]['Side'] == 'right'))): # nor so it if either is value is there
                 do_calibration = True
                 print('One or more keys have invalid values, calibration is required')
             # Print the values for the device so a person can decide if a new calibration is desired.
@@ -627,7 +623,7 @@ class Exo :
             # if we don't have to do a calibration check if they would like to
             if not do_calibration: 
                 while not valid_input:
-                    input('Would you like to calibrate (y/n): ')
+                    response = input('Would you like to calibrate (y/n): ')
                     if response == 'y' or response == 'n': 
                         valid_input = True
                     else :
@@ -640,14 +636,14 @@ class Exo :
         if do_calibration:
             valid_input = False
             while not valid_input:
-                    side = input(f'Select side for {id_hex} (l/r)')
+                    side = input(f'Select side for {id_hex} (l/r) : ')
                     if side == 'l' or side == 'r': 
-                        valid_input = true
+                        valid_input = True
                     else:
                         print('Invalid input, please try again')
             
             is_left = True if side == 'l' else False
-            direction = _get_direction_from_is_left(is_left)
+            direction = Exo._get_direction_from_is_left(is_left)
             # create arrays to store data for calibration.
             time_ms = []
             motor_angle_rad = []
@@ -655,13 +651,18 @@ class Exo :
             ankle_angle_rad = []
             # run till keyboard interrupt.
             try:
-                trash = input('Prepare to collect data. Hold shank as far as you can towards the toe.  A small force will be applied.  Once the belt is tight slowly move the shank towards the heel making sure the belt stays tight. \nHit any key to start.  \n\nPress ctrl+c when done.')
+                trash = input('Prepare to collect data. Hold shank as far as you can towards the toe.  A small force will be applied.  Once the belt is tight slowly move the shank towards the heel making sure the belt stays tight. \n\nPress Enter to start.  \nPress ctrl+c when done.')
                 time.sleep(1) # give a second for the person to get their hands back.
-                self._device.set_gains(**(Exo.pid_val_current_control))
+                
+                device.set_gains(**(Exo.pid_val_current_control))
                 while do_calibration :
                     # read the data and pull out the values needed to find the coefficients
+                    # print('Exo :: _check_and_run_calibration() : In while loop')
                     raw_data = device.read()
+                    # print('Exo :: _check_and_run_calibration() : device.read done')
                     data = Exo._process_data(raw_data, is_left)
+                    # print('Exo :: _check_and_run_calibration() : Exo._process_data done')
+                    # Exo.print_data([raw_data, data])
                     time_ms.append(data['state_time_ms'])
                     motor_acceleration_rad_s2.append(direction * raw_data['mot_acc'])
                     motor_angle_rad.append(data['motor_angle_rad'])
@@ -670,15 +671,20 @@ class Exo :
                     
             except KeyboardInterrupt:
                 device.stop_motor()
+            except RuntimeError :
+                print('-- Exo :: _check_and_run_calibration() : RuntimeError - device might not be streaming yet.')
+                return
+            
+            print('\n\nData collection finished.  It may take some time. Please be patient.')
             
             # calculate parameters 
-            polynomial_coeff = Exo._find_parameters_wm_wa((time_ms-time_ms[0])/1000, ankle_angle_rad, motor_angle_rad, motor_acceleration_rad_s2)
-            
+            polynomial_coeff = Exo._find_parameters_wm_wa((np.array(time_ms)-time_ms[0])/1000, ankle_angle_rad, motor_angle_rad, motor_acceleration_rad_s2)
+            print(f'-- Exo :: _check_and_run_calibration : polynomial_coeff = {polynomial_coeff}')
             # Check if boot section exists and add if it doesn't update if it does.
             if not config.has_section(id_hex):
                 config.add_section(id_hex)
             # create keys or overwrite them if they already exist.
-            config[id_hex]['side'] = 'Left' if is_left else 'Right'
+            config[id_hex]['side'] = 'left' if is_left else 'right'
             config[id_hex]['poly4'] = f'{polynomial_coeff[4]}'
             config[id_hex]['poly3'] = f'{polynomial_coeff[3]}'
             config[id_hex]['poly2'] = f'{polynomial_coeff[2]}'
@@ -713,14 +719,16 @@ if __name__ == '__main__':
                 left_boot.read_data()
                 print('\nLeft')
                 Exo.print_data(left_boot.raw_data)
-                left_boot.send_torque(.5)
+                Exo.print_data(left_boot.data)
+                left_boot.send_torque(.25)
                 # left_boot._device.command_motor_current(int(500)) # for use when we don't have the calibration done yet.
                 
             if 'right_boot' in locals():
                 right_boot.read_data()
                 print('\nRight')
                 Exo.print_data(right_boot.raw_data)
-                right_boot.send_torque(.5)
+                Exo.print_data(right_boot.data)
+                right_boot.send_torque(.25)
                 # right_boot._device.command_motor_current(int(500))  # for use when we don't have the calibration done yet.
                 
             if (('left_boot' not in locals()) and ('right_boot' not in locals())):
