@@ -175,9 +175,9 @@ class Exo :
         -------
         None   
         """
-        # self._device.stop_motor()
-        # self._device.stop_streaming()
-        # self._device.close()
+        self._device.stop_motor()
+        self._device.stop_streaming()
+        self._device.close()
         
     def set_parameters(self, **kwargs):
         """
@@ -412,7 +412,7 @@ class Exo :
             "motor_angle_rad" : direction * Exo._ticks_to_rad(raw_data["mot_ang"]),
             "motor_velocity_rad_s" : direction * raw_data["mot_vel"]*m.pi/180,
             "motor_current_A" : direction * raw_data["mot_cur"]/1000,
-            "ankle_angle_rad" : direction * raw_data["ank_ang"]/100*m.pi/180,
+            "ankle_angle_rad" : direction * Exo._ticks_to_rad(raw_data["ank_ang"]), #/100*m.pi/180, # the values appear to be in ticks rather than deg*10 like the documentation says, this is likely firmware specific so other versions would need a different conversion.
             "ankle_velocity_rad_s" : direction * raw_data["ank_vel"]/10*m.pi/180,
             "battery_voltage_V" : raw_data["batt_volt"]/1000,
         }
@@ -697,11 +697,9 @@ class Exo :
             file.close()
     
 if __name__ == '__main__':
-    import numpy as np
-    import matplotlib.pyplot as plt
     import os
+    from DataLogger import *
     
-    data = []
     # get the boots that are attached and ask the person if they would like to calibrate the boots, or run the calibration if needed.
     available_boots = Exo.scan_for_boots(do_calibration_check = True)
     # from the list of available boots attach them to the left or right boots, assumes one of each.
@@ -713,6 +711,11 @@ if __name__ == '__main__':
             right_boot = Exo(b, is_left)
             
     try:
+        if 'left_boot' in locals():
+            left_data_logger = DataLogger([left_boot.raw_data, left_boot.data], path = 'test_folder', base_name = f'left_{left_boot.id_hex}')
+        if 'right_boot' in locals():
+            right_data_logger = DataLogger([right_boot.raw_data, right_boot.data], path = 'test_folder', base_name = f'right_{right_boot.id_hex}')
+        
         while True :
             os.system('cls')  # clear the screen so we are only showing the most recent reading.
             if 'left_boot' in locals():
@@ -722,6 +725,7 @@ if __name__ == '__main__':
                 Exo.print_data(left_boot.data)
                 left_boot.send_torque(.25)
                 # left_boot._device.command_motor_current(int(500)) # for use when we don't have the calibration done yet.
+                left_data_logger.log([left_boot.raw_data, left_boot.data])
                 
             if 'right_boot' in locals():
                 right_boot.read_data()
@@ -730,6 +734,7 @@ if __name__ == '__main__':
                 Exo.print_data(right_boot.data)
                 right_boot.send_torque(.25)
                 # right_boot._device.command_motor_current(int(500))  # for use when we don't have the calibration done yet.
+                right_data_logger.log([right_boot.raw_data, right_boot.data])
                 
             if (('left_boot' not in locals()) and ('right_boot' not in locals())):
                 print('\nNo Exos found, please connect and turn on then restart program.')
@@ -737,11 +742,6 @@ if __name__ == '__main__':
            
     except KeyboardInterrupt:
         pass
-    
-    if 'left_boot' in locals():
-        left_boot.__del__() 
-    if 'right_boot' in locals():
-        right_boot.__del__()
         
         ##ACCL LED up is +z reading, Shank up is -y reading, toe up left_boot +reading right_boot - reading
         ## ankle ang, right decreases with plantarflexion, not zeroed left increases with plantar flexion
