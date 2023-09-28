@@ -2,7 +2,7 @@ class GaitCalculator:
     """
     Parameters
     ----------
-    _expected_step_duration_ms : int
+    _expected_stride_duration_ms : int
         The expected duration of a step in ms, based on the last few steps. Used to calculate the percent gait
     _expected_stance_duration_ms : int
         The expected duration of a stance in ms, based on the last few steps. Used to calculate the percent stance
@@ -18,6 +18,19 @@ class GaitCalculator:
         Used for a schmitt trigger for the heelstrike detector
     _toeoff_armed_timestamp_ms : int
         Tracks when the toeoff detector was armed
+
+    _heelstrike_timestamp_current : int
+        Most recent heelstrike timestamp
+    _heelstrike_timestamp_previous : int
+        Previous heelstrike timestamp
+    _toeoff_timestamp_current : int
+        Most recent toeoff timestamp
+    _toeoff_timestamp_previous : int
+        Previous toeoff timestamp 
+    _num_stride_times_to_avg : int
+        Number of step durations averaged to estimate expected_step_duration_ms
+    _past_stride_durations : list 
+        List of previous step durations used to estimate expected_step_duration_ms
 
     Input Parameters
     ----------------
@@ -37,9 +50,10 @@ class GaitCalculator:
     _calc_percent_stance()
         Calculates an estimate of the percent stance and returns that estimate.
     """
-    def __init__(self, heelstrike_segmentation_arm_threshold_rad_s = 150, heelstrike_armed_duration_percent_gait = 10):
+    def __init__(self, heelstrike_segmentation_arm_threshold_rad_s = 150, heelstrike_armed_duration_percent_gait = 10, 
+                 num_strides_to_avg = 10):
         # might want to make this a separate class.
-        self._expected_step_duration_ms = -1
+        self._expected_stride_duration_ms = -1
         self._expected_stance_duration_ms = -1
         
         self.heelstrike_trigger = False
@@ -50,6 +64,8 @@ class GaitCalculator:
         
         self._heelstrike_segmentation_arm_threshold_rad_s = heelstrike_segmentation_arm_threshold_rad_s
         self._heelstrike_armed_duration_percent_gait = heelstrike_armed_duration_percent_gait
+        self._num_strides_to_avg = num_strides_to_avg 
+        self._past_stride_durations = [-1] * self._num_strides_to_avg
         
         self._heelstrike_armed = False
         self._heelstrike_armed_timestamp_ms = -1
@@ -100,10 +116,11 @@ class GaitCalculator:
             self._heelstrike_armed_timestamp_ms = timestamp_ms
         if (self._heelstrike_armed and (gyro_rad_s <= self._heelstrike_segmentation_arm_threshold_rad_s)) :
             self.heelstrike_armed = False
-            self._heelstrike_armed_timestamp_ms = -1 # Why do we overwrite this? Wouldn't we use this to store the previous heelstrike time?
+            self._heelstrike_armed_timestamp_ms = -1 
             if  (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_step_duration_ms) :
                 triggered = True
-            
+                # update heelstrike timestamps and expected step duration 
+                self._update_expected_duration(timestamp_ms)
             
         self.heelstrike_trigger = triggered
         return self.heelstrike_trigger
@@ -141,6 +158,26 @@ class GaitCalculator:
             
         # self.segmentation_trigger = triggered
         return -1
+    
+    def _update_expected_duration(self, timestamp_ms):
+
+        if (self._heelstrike_timestamp_previous == -1):
+            self._heelstrike_timestamp_previous = timestamp_ms  # store the first heelstrike timestamp 
+            return 
+        
+        self._heelstrike_timestamp_previous = self._heelstrike_timestamp_current
+        self._heelstrike_timestamp_current = timestamp_ms
+        stride_duration = self._heelstrike_timestamp_current - self._heelstrike_timestamp_previous
+
+        if (-1 in self._past_stride_durations):
+            self._past_stride_durations.insert(0, stride_duration)
+            self._past_stride_durations.pop()
+        elif (stride_duration >= 0.25 * min(self._past_stride_durations) and
+              stride_duration <= 1.75 * min(self._past_stride_durations)): # check the stride duration is a reasonable length 
+            self._past_stride_durations.insert(0, stride_duration)
+            self._past_stride_durations.pop()
+            # calculate average of previous stride durations and update expected stride duration 
+            self._expected_stride_duration_ms = sum(self._past_stride_durations) / self._num_strides_to_avg
     
     def _calc_percent_gait(self, timestamp_ms):
         pass
