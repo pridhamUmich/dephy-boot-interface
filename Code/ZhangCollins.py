@@ -224,7 +224,7 @@ if __name__ == '__main__':
     # create the ZhangCollins instance
     zhang_collins = ZhangCollins()
     
-    zhang_collins.set_parameters(user_mass = 100, ramp_start_percent_gait = 0, onset_percent_gait = 27.1, peak_percent_gait = 50.4, stop_percent_gait = 62.7, onset_torque = 2, normalized_peak_torque = .2)
+    zhang_collins.set_parameters(user_mass = 100, ramp_start_percent_gait = 0, onset_percent_gait = 27.1, peak_percent_gait = 50.4, stop_percent_gait = 62.7, onset_torque = 2, normalized_peak_torque = 0.2)
     
     
     percent_gait = np.linspace(0,100,101) # create a set of percent gaits to calculate torque for.

@@ -7,7 +7,7 @@ import time
 import numpy as np 
 import matplotlib.pyplot as plt
 
-# P. Pridham, May 2023 
+# P. Pridham, May 2023; Modified by M. Wu, Sept 2023
 
 class Exo : 
     """ 

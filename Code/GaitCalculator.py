@@ -1,6 +1,7 @@
 class GaitCalculator:
     """
-    
+    Parameters
+    ----------
     _expected_step_duration_ms : int
         The expected duration of a step in ms, based on the last few steps. Used to calculate the percent gait
     _expected_stance_duration_ms : int
@@ -17,8 +18,16 @@ class GaitCalculator:
         Used for a schmitt trigger for the heelstrike detector
     _toeoff_armed_timestamp_ms : int
         Tracks when the toeoff detector was armed
-        
-        
+
+    Input Parameters
+    ----------------
+    _heelstrike_segmentation_arm_threshold_rad_s : int 
+        Threshold (rad/s) used to trigger heelstrike_armed
+    _heelstrike_armed_duration_percent_gait : int
+        Time that gyro reading should be above heelstrike threshold before the heelstrike_trigger becomes True 
+
+    Functions
+    ----------------    
     _check_for_heelstrike()
         Checks for a heelstrike and return true if one is detected, and false otherwise
     _check_for_toeoff()
@@ -28,7 +37,7 @@ class GaitCalculator:
     _calc_percent_stance()
         Calculates an estimate of the percent stance and returns that estimate.
     """
-    def __init__(heelstrike_segmentation_arm_threshold_rad_s = 150, heelstrike_armed_duration_percent_gait = 10):
+    def __init__(self, heelstrike_segmentation_arm_threshold_rad_s = 150, heelstrike_armed_duration_percent_gait = 10):
         # might want to make this a separate class.
         self._expected_step_duration_ms = -1
         self._expected_stance_duration_ms = -1
@@ -53,11 +62,11 @@ class GaitCalculator:
         
         
         
-    def calculate_gait_parameters(timestamp_ms, gyro_rad_s):
-        _check_for_heelstrike(timestamp_ms, gyro_rad_s)
-        _check_for_toeoff(timestamp_ms, gyro_rad_s)
-        _calc_percent_gait()
-        _calc_percent_stance()
+    def calculate_gait_parameters(self, timestamp_ms, gyro_rad_s):
+        self._check_for_heelstrike(timestamp_ms, gyro_rad_s)
+        self._check_for_toeoff(timestamp_ms, gyro_rad_s)
+        self._calc_percent_gait()
+        self._calc_percent_stance()
         
         return {
             'percent_gait' : self._percent_gait,
@@ -84,15 +93,15 @@ class GaitCalculator:
         # Other candidates also possible.
         triggered = False
         armed_time = 0
-        if self.armed_timestamp != -1 :
-            armed_time = timestamp_ms - self.armed_timestamp
+        if self._heelstrike_armed_timestamp_ms != -1 :
+            armed_time = timestamp_ms - self._heelstrike_armed_timestamp_ms
         if ((not self.heelstrike_armed) and gyro_rad_s >= self._heelstrike_segmentation_arm_threshold_rad_s) :
             self._heelstrike_armed = True
             self._heelstrike_armed_timestamp_ms = timestamp_ms
         if (self._heelstrike_armed and (gyro_rad_s <= self._heelstrike_segmentation_arm_threshold_rad_s)) :
             self.heelstrike_armed = False
-            self._heelstrike_armed_timestamp_ms = -1
-            if  (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self.expected_duration) :
+            self._heelstrike_armed_timestamp_ms = -1 # Why do we overwrite this? Wouldn't we use this to store the previous heelstrike time?
+            if  (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_step_duration_ms) :
                 triggered = True
             
             
@@ -132,3 +141,9 @@ class GaitCalculator:
             
         # self.segmentation_trigger = triggered
         return -1
+    
+    def _calc_percent_gait(self, timestamp_ms):
+        pass
+
+    def _calc_percent_stance(self, timestamp_ms):
+        pass
