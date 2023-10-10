@@ -122,13 +122,13 @@ class GaitCalculator:
         armed_time = 0
         if self._heelstrike_armed_timestamp_ms != -1 :
             armed_time = timestamp_ms - self._heelstrike_armed_timestamp_ms
-        if ((not self._heelstrike_armed) and gyro_rad_s >= self._heelstrike_segmentation_arm_threshold_rad_s) :
+        if ((not self._heelstrike_armed) and gyro_rad_s >= self._heelstrike_segmentation_arm_threshold_rad_s):
             self._heelstrike_armed = True
             self._heelstrike_armed_timestamp_ms = timestamp_ms
-        if (self._heelstrike_armed and (gyro_rad_s <= self._heelstrike_segmentation_arm_threshold_rad_s)) :
+        if (self._heelstrike_armed and (gyro_rad_s <= self._heelstrike_segmentation_arm_threshold_rad_s)):
             self._heelstrike_armed = False
             self._heelstrike_armed_timestamp_ms = -1 
-            if  (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_stride_duration_ms) :
+            if  (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_stride_duration_ms):
                 triggered = True
                 # update heelstrike timestamps and expected stride duration 
                 self._update_expected_stride_duration(timestamp_ms)
@@ -157,13 +157,13 @@ class GaitCalculator:
         armed_time = 0
         if self._toeoff_armed_timestamp_ms != -1 :
             armed_time = timestamp_ms - self._toeoff_armed_timestamp_ms
-        if ((not self._toeoff_armed) and (gyro_rad_s <= 0)) :
+        if ((not self._toeoff_armed) and (gyro_rad_s <= 0)):
             self._toeoff_armed = True
             self._toeoff_armed_timestamp_ms = timestamp_ms
-        if (self._toeoff_armed and (gyro_rad_s > 0) ) :
+        if (self._toeoff_armed and (gyro_rad_s > 0)):
             self._toeoff_armed = False
             self._toeoff_armed_timestamp_ms = -1
-            if (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_stride_duration_ms) :
+            if (armed_time > self._heelstrike_armed_duration_percent_gait/100 * self._expected_stride_duration_ms):
                 triggered = True
                 # update toeoff timestamps and expected stance duration 
                 self._update_expected_stance_duration(timestamp_ms)
@@ -212,7 +212,11 @@ class GaitCalculator:
     def _calc_percent_gait(self, timestamp_ms):
         time_elapsed = timestamp_ms - self._heelstrike_timestamp_current
         self.percent_gait = time_elapsed / self._expected_stride_duration_ms * 100
-        self.percent_gait = max(100, self.percent_gait) # cap percent_gait at 100 
+        # cap percent_gait at 100 
+        self.percent_gait = max(100, self.percent_gait) 
 
     def _calc_percent_stance(self, timestamp_ms):
-        return -1
+        time_elapsed = timestamp_ms - self._heelstrike_timestamp_current
+        self.percent_stance = time_elapsed / self._expected_stance_duration_ms * 100
+        # if percent stance is >100, we are in swing, indicated by -1
+        self.percent_stance = -1 if (self.percent_stance > 100) else self.percent_stance 

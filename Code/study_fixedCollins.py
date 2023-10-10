@@ -19,7 +19,8 @@ class FixedCollins:
         self.left_boot = left_boot
         self.right_boot = right_boot
         self.controller = ZhangCollins()
-        self.gait = GaitCalculator()
+        self.left_gait = GaitCalculator()
+        self.right_gait = GaitCalculator()
         self.start_time = time.monotonic()	# initialize the time for keeping track of when each trial started, this will be overwritten when the trial starts.
         self.feedback_mode = -1             # initialize training feedback mode to -1 (free exploration) -- 0 for metronome, 1 for strategy feedback 
        
@@ -77,19 +78,21 @@ class FixedCollins:
 
         self.feedback_mode = feedback_mode                                  # Need to provide audio feedback in external program 
         self.left_boot.read_data()                                          # Updates exoskeleton data
-                                                                            # approximates percent_gait, expected gait duration, etc
+        self.left_gait.calculate_gait_parameters()                          # Approximates percent_gait, expected gait duration, etc
         self.right_boot.read_data()
+        self.right_gait.calculate_gait_parameters()
 
         if use_torque == 1:
             # apply appropriate torques according to Zhang/Collins profile 
-            pg = 0
-            self.controller.calculate_torque_cmd(percent_gait = pg)
-            self.left_boot.run_collins_profile(external_read = True)        # Applies torque according to gait percent and Zhang/Collins profile 
-            self.right_boot.run_collins_profile(external_read = True)
+
+            left_tau = self.controller.calculate_torque_cmd(percent_gait = self.left_gait.percent_gait)
+            right_tau = self.controller.calculate_torque_cmd(percent_gait = self.right_gait.percent_gait)
+            self.left_boot.send_torque(left_tau)        # Applies torque according to gait percent and Zhang/Collins profile 
+            self.right_boot.send_torque(right_tau)
         else:
-            # set the control mode to current and set the current command to 0, i.e. no torque / slack belt  
-            self.left_boot.zero_current()
-            self.right_boot.zero_current()
+            # set the control mode to current and set the current command to 0, i.e. no torque / no slack belt  
+            self.left_boot.send_torque(0)           
+            self.right_boot.send_torque(0)
 
     def free_training(self, restart_trial = False):
         """Free exploration training protocol, where the user walks with no guidance or feedback with a fixed Zhang/Collins controller.
@@ -109,15 +112,15 @@ class FixedCollins:
         current_idx = self.check_time(segment_min, restart_trial)           # Check if which trial segment we are in or if the trial has ended (-1)
 
         if restart_trial:
-            self.left_boot.clear_gait_estimate()
-            self.right_boot.clear_gait_estimate()
+            self.left_gait.clear_gait_estimate()
+            self.right_gait.clear_gait_estimate()
         
         if current_idx != -1:                                           
             self.trial_handler(feedback_mode[current_idx], use_torque[current_idx])
         else:
             # trial has ended, set current to zero and return that trial has finished 
-            self.left_boot.zero_current()
-            self.right_boot.zero_current()
+            self.left_boot.send_torque(0)           
+            self.right_boot.send_torque(0)
             trial_running = False
             
         return trial_running
@@ -141,15 +144,15 @@ class FixedCollins:
         current_idx = self.check_time(segment_min, restart_trial)           # Check if which trial segment we are in or if the trial has ended (-1)
 
         if restart_trial:
-            self.left_boot.clear_gait_estimate()
-            self.right_boot.clear_gait_estimate()
+            self.left_gait.clear_gait_estimate()
+            self.right_giat.clear_gait_estimate()
 
         if current_idx != -1:                                           
             self.trial_handler(feedback_mode[current_idx], use_torque[current_idx])
         else:
             # trial has ended, set current to zero and return that trial has finished 
-            self.left_boot.zero_current()
-            self.right_boot.zero_current()
+            self.left_boot.send_torque(0)           
+            self.right_boot.send_torque(0)
             trial_running = False
             
         return trial_running
@@ -172,15 +175,15 @@ class FixedCollins:
         current_idx = self.check_time(segment_min, restart_trial)           # Check if which trial segment we are in or if the trial has ended (-1)
 
         if restart_trial:
-            self.left_boot.clear_gait_estimate()
-            self.right_boot.clear_gait_estimate()
+            self.left_gait.clear_gait_estimate()
+            self.right_gait.clear_gait_estimate()
 
         if current_idx != -1:                                           
             self.trial_handler(feedback_mode[current_idx], use_torque[current_idx])
         else:
             # trial has ended, set current to zero and return that trial has finished 
-            self.left_boot.zero_current()
-            self.right_boot.zero_current()
+            self.left_boot.send_torque(0)           
+            self.right_boot.send_torque(0)
             trial_running = False
             
         return trial_running
