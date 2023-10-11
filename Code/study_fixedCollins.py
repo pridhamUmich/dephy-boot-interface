@@ -1,7 +1,7 @@
 # Modified by M. Wu 2023, based on study_one.py by P. Pridham, 2020.
 
 import time 
-import numpy as np 
+# import numpy as np 
 from ZhangCollins import *
 from GaitCalculator import *
 
