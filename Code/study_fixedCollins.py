@@ -187,4 +187,39 @@ class FixedCollins:
             trial_running = False
             
         return trial_running
+
+if __name__ == '__main__':
+    from Exo import *
+    from DataLogger import *
+
+    user_mass = 60.0
+
+    available_boots = Exo.scan_for_boots(do_calibration_check=True)
+    for b in available_boots:
+        is_left = Exo.get_is_left(available_boots[b])
+        if is_left:
+            left_boot = Exo(b, is_left)
+        elif None != is_left:
+            right_boot = Exo(b, is_left)
     
+    try:
+        if 'left_boot' in locals():
+            left_data_logger = DataLogger([left_boot.raw_data, left_boot.data], path = 'test_folder', base_name = f'left_{left_boot.id_hex}')
+        if 'right_boot' in locals():
+            right_data_logger = DataLogger([right_boot.raw_data, right_boot.data], path = 'test_folder', base_name = f'right_{right_boot.id_hex}')    
+        if (('left_boot' not in locals()) and ('right_boot' not in locals())):
+            print('\nNo Exos found, please connect and turn on then restart program.')
+
+        session = FixedCollins(user_mass, left_boot, right_boot)    # initialize study session
+        # run testing module to test 
+        trial_running = session.testing(restart_trial=True)
+        while trial_running:
+            time.sleep(1/(2*left_boot.streaming_frequency))
+            trial_running = session.testing()
+            left_data_logger.log([left_boot.raw_data, left_boot.data])
+            right_data_logger.log([right_boot.raw_data, right_boot.data])
+            
+        print('Testing ended\n')
+        
+    except KeyboardInterrupt:
+        pass     
