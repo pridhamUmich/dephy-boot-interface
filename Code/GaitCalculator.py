@@ -89,10 +89,10 @@ class GaitCalculator:
         self._calc_percent_stance(timestamp_ms)
         
         return {
-            'percent_gait' : self._percent_gait,
-            'percent_stance' : self._percent_stance,
-            'heelstrike_trigger' : self._heelstrike_trigger,
-            'toeoff_trigger' : self._toeoff_trigger,
+            'percent_gait' : self.percent_gait,
+            'percent_stance' : self.percent_stance,
+            'heelstrike_trigger' : self.heelstrike_trigger,
+            'toeoff_trigger' : self.toeoff_trigger,
         }
     
     def clear_gait_estimate(self):
