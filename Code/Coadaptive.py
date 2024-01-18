@@ -219,7 +219,7 @@ class Coadaptive(Controller):
         self.torque_cmd = tau # store the torque command.
         return tau # return the torque command.
 
-    def update_profile(self, EMG, IMU, ankle):
+    def update_parameters(self, **kwargs):
         """
         Updates the torque profile based on EMG, IMU, and ankle data from Dephy exoskeleton. 
 

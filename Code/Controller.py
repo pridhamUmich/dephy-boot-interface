@@ -71,3 +71,18 @@ class Controller(abc.ABC) :
         """
         pass
     
+    @abc.abstractmethod
+    def update_parameters(self, **kwargs) :
+        """
+        Updates torque profile parameters using input state parameters.
+
+        Parameters
+        ----------
+        **kwargs
+            State information should be passed as keyword arguments.
+            
+        Returns
+        -------
+        None
+        """
+        pass
