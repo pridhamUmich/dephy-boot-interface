@@ -1,5 +1,6 @@
 from Controller import *
 import math as m 
+import numpy as np 
 
 # M. Wu, September 2023
 
@@ -225,10 +226,112 @@ class Coadaptive(Controller):
 
         Parameters
         ----------
-        EMG: readings from electromyography sensors for muscle activity data (up to 16 sensors, passed from EMG module)
+        EMG_data: readings from electromyography sensors for muscle activity data (up to 16 sensors, passed from EMG module)
         IMU: readings from inertial measurement unit sensors for angular kinematics 
-        ankle: readings from Dephy ankle exoskeleton 
-
+        ankle: readings from Dephy ankle exoskeleton  
         """
+        k1 = 0.1
+        k2 = 0.1
+        k3 = 0.11
+        k4 = 0.04
+        k5 = 0.04
+        k6 = 0.04
+        k7 = 0.06
+        k8 = 0.05
+        k9 = 0.00845
+        m_ankle = 1.3
+        m_hip = 1.0
+       
+        """
+        EMG Readings - Order of Sensors + Muscles must be consistent
+
+        Order of Sensors - SOL, GAS, TA, BF, RF, TFL, Gmax 
+                           0    1    2   3   4   5    6
+        """
+        
+        if("emg_data" in kwargs):
+            """
+            Ankle Contributions 
+            """
+            #SOL 
+            sol_data = kwargs["emg_data"][0] / np.power(self.mean_time_series(self, kwargs["emg_data"][0]), m_ankle)
+            sol_change = self.calculate_rms(sol_data)
+            tp = tp + k1 * sol_change
+
+            #GAS 
+            gas_data = kwargs["emg_data"][1] / pow(self.mean_time_series(self, kwargs["EMG_data"][1]), m_ankle)
+            gas_change = self.calculate_rms(gas_data)
+            tp = tp + k2 * gas_change
+
+            #TA 
+            ta_change = self.calculate_rms(self, kwargs["emg_data"][2])
+            tp = tp - k3 * ta_change
+
+            '''
+            Knee Contributions
+            To Do: 
+            Calculate torque changes for knee CCI 
+            '''
+            
+            '''
+            Hip Contributions
+            '''
+            tfl_data = kwargs["emg_data"][5]
+            tfl_change = self.calculate_rms(np.power(self.mean_time_series(tfl_data), m_hip))
+            tp = tp + k6 * tfl_change
+
+            '''
+            To Do: 
+            Calculate torque changes for hip CCI 
+            '''
+
+        if("imu_data" in kwargs):
+            """
+            To Do: 
+            include torque changes from ankle and hip angles
+            """
+            
+
+        #update the parameters now that tp has been changed 
+        self.a1 = (2 *(self.tp - self.ts))/m.pow((self.t1 - self.t2),3)
+        self.b1 = -((3 *(self.t1 + self.t2) *(self.tp - self.ts)) / m.pow((self.t1 - self.t2),3))
+        self.c1 = (6* self.t1 * self.t2 * (self.tp - self.ts))/ m.pow((self.t1 - self.t2),3)
+        self.d1 = -((-m.pow(self.t1, 3) *self.tp + 3 * m.pow(self.t1, 2)* self.t2 * self.tp - 3 * self.t1 * m.pow(self.t2,2) * self.ts + m.pow(self.t2,3) * self.ts)/ m.pow((self.t1 - self.t2),3))
+        
+        self.a2 = -((self.tp - self.ts)/(2* m.pow((self.t2 - self.t3),3)))
+        self.b2 = (3 *self.t3 *(self.tp - self.ts))/(2 * m.pow((self.t2 - self.t3),3))
+        self.c2 = (3 *(m.pow(self.t2,2) - 2 *self.t2 *self.t3) * (self.tp - self.ts))/(2* m.pow((self.t2 - self.t3),3))
+        self.d2 = -((3 * m.pow(self.t2,2) * self.t3 * self.tp - 6 * self.t2 * m.pow(self.t3, 2) * self.tp + 2 * m.pow(self.t3,3) * self.tp - 2 * m.pow(self.t2,3) * self.ts + 3 * m.pow(self.t2, 2) * self.t3 * self.ts)/(2 * m.pow((self.t2 - self.t3), 3)));
+
+       
+
+    def calculate_rms(self, data):
+        """
+        Calculate the RMS of the given data step
+
+        Parameters 
+        --- 
+        data : EMG data 
+
+        Output 
+        ---
+        root mean square of this data 
+        """
+        rms = np.sqrt(np.mean(np.square(data)))
+        return rms
+
+    def mean_time_series(self, data):
+        """
+        Calculates the mean time series of the given data step 
+
+        Parameters
+        ---
+        data : EMG data 
+
+        Output 
+        ---
+        the mean time series of this data 
+        """
+        return np.mean(data)
 
         pass

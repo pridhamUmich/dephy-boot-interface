@@ -213,7 +213,7 @@ class GaitCalculator:
         time_elapsed = timestamp_ms - self._heelstrike_timestamp_current
         self.percent_gait = time_elapsed / self._expected_stride_duration_ms * 100
         # cap percent_gait at 100 
-        self.percent_gait = max(100, self.percent_gait) 
+        self.percent_gait = min(100, self.percent_gait) 
 
     def _calc_percent_stance(self, timestamp_ms):
         time_elapsed = timestamp_ms - self._heelstrike_timestamp_current

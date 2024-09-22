@@ -1,4 +1,5 @@
 from Controller import *
+from Cometa import * 
 import math as m
 
 # P. Pridham, May 2023 
@@ -230,7 +231,10 @@ if __name__ == '__main__':
     percent_gait = np.linspace(0,100,101) # create a set of percent gaits to calculate torque for.
     torque_cmd = [] # create a place to store the torque command output for printing.
         
+    current_rms = 0;
     for p in percent_gait : # iterate through the different values of percent_gait.
+
+        
         torque_cmd.append(zhang_collins.calculate_torque_cmd(percent_gait = p)) # append the newly calculated value to the end of the torque_cmd.
         # print(f'ZhangCollins :: __main__ : percent_gait {p} -> torque_cmd {zhang_collins.calculate_torque_cmd([p])}')  # debug statement.
     # print(torque_cmd) # debug statement.

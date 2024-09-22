@@ -6,7 +6,6 @@ import json
 import time
 import numpy as np 
 import matplotlib.pyplot as plt
-
 # P. Pridham, May 2023; Modified by M. Wu, Sept 2023
 
 class Exo : 
@@ -723,7 +722,7 @@ if __name__ == '__main__':
                 print('\nLeft')
                 Exo.print_data(left_boot.raw_data)
                 Exo.print_data(left_boot.data)
-                left_boot.send_torque(.25)
+                left_boot.send_torque(.25) 
                 # left_boot._device.command_motor_current(int(500)) # for use when we don't have the calibration done yet.
                 left_data_logger.log([left_boot.raw_data, left_boot.data])
                 
